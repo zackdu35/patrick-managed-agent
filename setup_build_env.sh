@@ -69,7 +69,6 @@ if [ -n "$PROXY_HOST" ] && [ -n "$PROXY_PORT" ]; then
     else
         echo "Warning: cacerts file not found under /usr/lib/jvm"
     fi
-fi
 
     # 3. Configure gradle.properties globally and locally
     echo "Configuring gradle.properties with proxy settings..."

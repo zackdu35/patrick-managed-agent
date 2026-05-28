@@ -3,7 +3,16 @@ set -e
 
 echo "=== STARTING ANDROID BUILD ENVIRONMENT SETUP ==="
 
-# 1. Detect proxy settings
+# 1. Install Java if not present
+if ! command -v java &>/dev/null; then
+    echo "Java not found. Installing openjdk-17-jdk-headless..."
+    # Update package lists and install Java headless
+    apt-get update -qq && apt-get install -y openjdk-17-jdk-headless
+else
+    echo "Java is already installed: $(java -version 2>&1 | head -n 1)"
+fi
+
+# 2. Detect proxy settings
 PROXY_HOST=""
 PROXY_PORT=""
 

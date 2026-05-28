@@ -26,32 +26,41 @@ fi
 
 # 2. Import Proxy Certificate if proxy is active
 if [ -n "$PROXY_HOST" ] && [ -n "$PROXY_PORT" ]; then
-    echo "Fetching SSL certificate from proxy..."
-    # Connect via openssl to get the proxy's certificate
-    # We attempt to connect to services.gradle.org via the proxy
-    openssl s_client -showcerts -connect services.gradle.org:443 -proxy "$PROXY_HOST:$PROXY_PORT" < /dev/null 2>/dev/null | openssl x509 -outform PEM > /tmp/proxy.crt || true
-
-    if [ -f /tmp/proxy.crt ] && [ -s /tmp/proxy.crt ]; then
-        echo "Successfully fetched proxy certificate."
-        
-        # Find all cacerts paths
-        CACERTS_PATHS=$(find /usr/lib/jvm -name cacerts 2>/dev/null || true)
-        
-        if [ -z "$CACERTS_PATHS" ]; then
-            echo "Warning: cacerts file not found under /usr/lib/jvm"
-        else
-            for cacerts_file in $CACERTS_PATHS; do
-                echo "Importing certificate into $cacerts_file..."
-                # Delete existing alias if it exists to avoid conflicts
-                keytool -delete -alias proxy -keystore "$cacerts_file" -storepass changeit -noprompt 2>/dev/null || true
-                # Import the cert
-                keytool -importcert -trustcacerts -file /tmp/proxy.crt -alias proxy -keystore "$cacerts_file" -storepass changeit -noprompt
-            done
-            echo "Proxy certificate imported successfully into all Java keystores."
-        fi
-    else
-        echo "Warning: Could not fetch proxy certificate. Proceeding..."
+    echo "Syncing system certificates to Java keystore via ca-certificates-java..."
+    if [ -f /usr/bin/dpkg-reconfigure ]; then
+        dpkg-reconfigure --frontend=noninteractive ca-certificates-java || true
     fi
+
+    # Find all cacerts paths
+    CACERTS_PATHS=$(find /usr/lib/jvm -name cacerts 2>/dev/null || true)
+    
+    if [ -n "$CACERTS_PATHS" ]; then
+        # Search and import any custom certs from /usr/local/share/ca-certificates/ or /usr/share/ca-certificates/
+        find /usr/local/share/ca-certificates/ /usr/share/ca-certificates/ -name "*.crt" 2>/dev/null | while read cert; do
+            alias_name=$(basename "$cert" .crt | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_')
+            echo "Found system CA certificate: $cert"
+            for cacerts_file in $CACERTS_PATHS; do
+                echo "Importing system CA $cert into $cacerts_file..."
+                keytool -delete -alias "$alias_name" -keystore "$cacerts_file" -storepass changeit -noprompt 2>/dev/null || true
+                keytool -importcert -trustcacerts -file "$cert" -alias "$alias_name" -keystore "$cacerts_file" -storepass changeit -noprompt || true
+            done
+        done
+
+        # Also fallback to extracting the leaf proxy certificate just in case
+        echo "Fetching leaf SSL certificate from proxy..."
+        openssl s_client -showcerts -connect services.gradle.org:443 -proxy "$PROXY_HOST:$PROXY_PORT" < /dev/null 2>/dev/null | openssl x509 -outform PEM > /tmp/proxy.crt || true
+        if [ -f /tmp/proxy.crt ] && [ -s /tmp/proxy.crt ]; then
+            for cacerts_file in $CACERTS_PATHS; do
+                echo "Importing fetched leaf certificate into $cacerts_file..."
+                keytool -delete -alias proxy -keystore "$cacerts_file" -storepass changeit -noprompt 2>/dev/null || true
+                keytool -importcert -trustcacerts -file /tmp/proxy.crt -alias proxy -keystore "$cacerts_file" -storepass changeit -noprompt || true
+            done
+        fi
+        echo "Proxy certificates imported successfully into all Java keystores."
+    else
+        echo "Warning: cacerts file not found under /usr/lib/jvm"
+    fi
+fi
 
     # 3. Configure gradle.properties globally and locally
     echo "Configuring gradle.properties with proxy settings..."

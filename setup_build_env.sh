@@ -55,14 +55,15 @@ if [ -n "$PROXY_HOST" ] && [ -n "$PROXY_PORT" ]; then
             done
         done
 
-        # Also fallback to extracting the leaf proxy certificate just in case
-        echo "Fetching leaf SSL certificate from proxy..."
-        openssl s_client -showcerts -connect services.gradle.org:443 -proxy "$PROXY_HOST:$PROXY_PORT" < /dev/null 2>/dev/null | openssl x509 -outform PEM > /tmp/proxy.crt || true
-        if [ -f /tmp/proxy.crt ] && [ -s /tmp/proxy.crt ]; then
+        # Fetching the proper Root CA directly from mitmproxy
+        echo "Fetching Root CA from mitmproxy..."
+        curl --proxy "http://$PROXY_HOST:$PROXY_PORT" http://mitm.it/cert/pem -o /tmp/mitmproxy-ca-cert.pem || true
+        
+        if [ -f /tmp/mitmproxy-ca-cert.pem ] && [ -s /tmp/mitmproxy-ca-cert.pem ]; then
             for cacerts_file in $CACERTS_PATHS; do
-                echo "Importing fetched leaf certificate into $cacerts_file..."
-                keytool -delete -alias proxy -keystore "$cacerts_file" -storepass changeit -noprompt 2>/dev/null || true
-                keytool -importcert -trustcacerts -file /tmp/proxy.crt -alias proxy -keystore "$cacerts_file" -storepass changeit -noprompt || true
+                echo "Importing mitmproxy Root CA into $cacerts_file..."
+                keytool -delete -alias "mitmproxy-ca" -keystore "$cacerts_file" -storepass changeit -noprompt 2>/dev/null || true
+                keytool -importcert -trustcacerts -file /tmp/mitmproxy-ca-cert.pem -alias "mitmproxy-ca" -keystore "$cacerts_file" -storepass changeit -noprompt || true
             done
         fi
         echo "Proxy certificates imported successfully into all Java keystores."

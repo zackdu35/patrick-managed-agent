@@ -126,3 +126,23 @@ if [ -n "$PROXY_HOST" ] && [ -n "$PROXY_PORT" ] && [ ! -f "/tmp/gradle-9.1.0-bin
 fi
 
 echo "=== BUILD ENVIRONMENT READY! ==="
+
+# 6. Android SDK & Licenses Injection (Persisting the fix)
+echo "Setting up Android SDK and accepting licenses..."
+mkdir -p /tmp/android-sdk/licenses
+
+# Point Gradle to the temporary SDK location
+echo "sdk.dir=/tmp/android-sdk" > /.agents/workspace/local.properties
+
+# Inject accepted license hashes
+cat << 'EOF' > /tmp/android-sdk/licenses/android-sdk-license
+8933bad161af4178b1185d1a37fbf41ea5269c55
+d56f5187479451eabf01fb78af6dfcb131a6481e
+24333f8a63b6825ea9c5514f83c2829b004d1fee
+EOF
+
+cat << 'EOF' > /tmp/android-sdk/licenses/android-sdk-preview-license
+84831b9409646a918e30573bab4c9c91346d8abd
+EOF
+
+echo "Android SDK configuration complete."
